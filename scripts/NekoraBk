@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/../backend"
+python -m uvicorn nekora_core.main:app --host 127.0.0.1 --port "${NEKORA_PORT:-8000}"

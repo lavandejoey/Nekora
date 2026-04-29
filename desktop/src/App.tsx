@@ -20,7 +20,9 @@ export function App() {
   const [modules, setModules] = useState<ModuleInfo[]>([]);
   const [tools, setTools] = useState<ToolInfo[]>([]);
   const [selectedToolId, setSelectedToolId] = useState<string>("");
-  const [inputText, setInputText] = useState("Hello from Nekora");
+  const [inputText, setInputText] = useState(
+    "Hello from Nekora.\n你好 Nekora。\nこんにちは、ネコラ。",
+  );
   const [result, setResult] = useState<ToolRunResponse | null>(null);
   const [running, setRunning] = useState(false);
 

@@ -1,4 +1,3 @@
 fn main() {
-    nekora_lib::run()
+    nekora_lib::run_combined()
 }
-

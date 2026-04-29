@@ -5,10 +5,19 @@ description = "Nekora desktop host"
 authors = ["Ziyi LIU"]
 edition = "2021"
 license = "GPL-3.0-only"
+default-run = "Nekora"
 
 [lib]
 name = "nekora_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "Nekora"
+path = "src/main.rs"
+
+[[bin]]
+name = "NekoraUi"
+path = "src/ui.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

@@ -75,6 +75,81 @@ scripts/run_desktop_dev.sh
 The UI expects the backend at `http://127.0.0.1:8000`. Override with
 `VITE_NEKORA_API_BASE` if needed.
 
+## Runtime Modes
+
+Nekora has three local run modes:
+
+```text
+NekoraBk  Backend only
+NekoraUi  Windowed UI only
+Nekora    Combined one-click app: starts backend, then opens the window
+```
+
+Development helpers:
+
+```bash
+scripts/NekoraBk
+scripts/NekoraUi
+scripts/Nekora
+```
+
+`Nekora` starts the backend as a child process and stops it when the window
+closes. `NekoraUi` expects a backend to already be available at
+`http://127.0.0.1:8000`.
+
+## Windowed Desktop Builds
+
+Build and run the combined Linux app on Linux or WSL with WSLg:
+
+```bash
+cd desktop
+npm run tauri:build:linux
+./src-tauri/target/release/Nekora
+```
+
+Build the frontend-only UI executable:
+
+```bash
+cd desktop
+cargo build --manifest-path src-tauri/Cargo.toml --release --bin NekoraUi
+./src-tauri/target/release/NekoraUi
+```
+
+The Debian bundle is written to:
+
+```text
+desktop/src-tauri/target/release/bundle/deb/Nekora_0.1.0_amd64.deb
+```
+
+Build the Windows executable from a Windows shell, not from WSL:
+
+```powershell
+cd desktop
+npm install
+npm run tauri:build
+```
+
+The unpackaged Windows executable is expected under:
+
+```text
+desktop\src-tauri\target\release\Nekora.exe
+```
+
+The frontend-only Windows executable can be built with:
+
+```powershell
+cargo build --manifest-path src-tauri\Cargo.toml --release --bin NekoraUi
+```
+
+Expected output:
+
+```text
+desktop\src-tauri\target\release\NekoraUi.exe
+```
+
+Windows builds require the Rust toolchain, Microsoft C++ Build Tools, WebView2,
+Node.js, and npm installed on Windows.
+
 ## Module Direction
 
 Each module should expose a `nekora.module.json` manifest and a Python factory:
