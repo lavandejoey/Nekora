@@ -1,0 +1,18 @@
+[package]
+name = "nekora"
+version = "0.1.0"
+description = "Nekora desktop host"
+authors = ["Nekora"]
+edition = "2021"
+license = "GPL-3.0-only"
+
+[lib]
+name = "nekora_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
