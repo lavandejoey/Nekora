@@ -1,0 +1,40 @@
+# Local Codex/session state
+.codex
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Node/Tauri frontend artifacts
+node_modules/
+dist/
+build/
+target/
+
+# Local app data
+data/
+*.sqlite
+*.sqlite3
+*.db
+
+# External Nekora modules checked out for development.
+# Module repos should stay independent from this core repo.
+external_modules/
+modules_external/
+modules_dev/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
