@@ -99,6 +99,22 @@ closes. `NekoraUi` expects a backend to already be available at
 
 ## Windowed Desktop Builds
 
+Quick CLI:
+
+```bash
+# Linux / WSLg combined app
+cd desktop && npm install && npm run tauri:build:linux
+./src-tauri/target/release/Nekora
+```
+
+```powershell
+# Windows combined app
+cd desktop
+npm install
+npm run tauri:build
+.\src-tauri\target\release\Nekora.exe
+```
+
 Build and run the combined Linux app on Linux or WSL with WSLg:
 
 ```bash

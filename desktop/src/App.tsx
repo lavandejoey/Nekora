@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { faCaretRight, faCheck, faCopy } from "@fortawesome/free-solid-svg-icons";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ModuleInfo, ToolInfo, ToolRunResponse, api } from "./api";
 import logoUrl from "./assets/Nekora.png";
@@ -25,6 +27,8 @@ export function App() {
   );
   const [result, setResult] = useState<ToolRunResponse | null>(null);
   const [running, setRunning] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const runIdRef = useRef(0);
 
   useEffect(() => {
     async function load() {
@@ -53,20 +57,39 @@ export function App() {
     [selectedToolId, tools],
   );
 
-  async function runSelectedTool() {
-    if (!selectedTool) return;
-    setRunning(true);
-    setResult(null);
-    setError("");
+  useEffect(() => {
+    if (!selectedTool || loadState !== "ready") return;
 
-    try {
-      const response = await api.runTool(selectedTool.id, { text: inputText });
-      setResult(response);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setRunning(false);
-    }
+    const runId = runIdRef.current + 1;
+    runIdRef.current = runId;
+    setRunning(true);
+    setError("");
+    setCopied(false);
+
+    const timeout = window.setTimeout(async () => {
+      try {
+        const response = await api.runTool(selectedTool.id, { text: inputText });
+        if (runIdRef.current === runId) {
+          setResult(response);
+        }
+      } catch (err) {
+        if (runIdRef.current === runId) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      } finally {
+        if (runIdRef.current === runId) {
+          setRunning(false);
+        }
+      }
+    }, 160);
+
+    return () => window.clearTimeout(timeout);
+  }, [inputText, loadState, selectedTool]);
+
+  async function copyOutput() {
+    if (!result) return;
+    await navigator.clipboard.writeText(outputClipboardText(result.output));
+    setCopied(true);
   }
 
   return (
@@ -133,7 +156,7 @@ export function App() {
                   type="button"
                 >
                   <span>{tool.name}</span>
-                  <small>{tool.description}</small>
+                  <ToolExample toolId={tool.id} />
                 </button>
               ))}
             </div>
@@ -145,28 +168,104 @@ export function App() {
                 value={inputText}
                 onChange={(event) => setInputText(event.target.value)}
               />
-              <button
-                className="run-button"
-                disabled={!selectedTool || running}
-                onClick={runSelectedTool}
-                type="button"
-              >
-                {running ? "Running" : "Run"}
-              </button>
             </div>
           </section>
 
           <section className="panel output-panel">
             <div className="panel-header">
               <h2>Output</h2>
-              <span>{selectedTool?.id ?? "none"}</span>
+              <button
+                className="copy-button"
+                aria-label="Copy output"
+                title="Copy output"
+                disabled={!result}
+                onClick={copyOutput}
+                type="button"
+              >
+                <FontAwesomeIcon icon={copied ? faCheck : faCopy} />
+              </button>
             </div>
             {error ? <p className="error-text">{error}</p> : null}
-            <pre>{result ? JSON.stringify(result.output, null, 2) : "{}"}</pre>
+            <OutputView output={result?.output ?? null} running={running} />
           </section>
         </section>
       )}
       <footer className="app-footer">{copyrightText()}</footer>
     </main>
   );
+}
+
+function ToolExample({ toolId }: { toolId: string }) {
+  const examples: Record<string, [string, string]> = {
+    "text.uppercase": ["abc", "ABC"],
+    "text.lowercase": ["ABC", "abc"],
+    "text.count": ["text", "4"],
+  };
+  const [before, after] = examples[toolId] ?? ["input", "output"];
+
+  return (
+    <small className="tool-example">
+      <span>{before}</span>
+      <FontAwesomeIcon icon={faCaretRight} />
+      <span>{after}</span>
+    </small>
+  );
+}
+
+function OutputView({
+  output,
+  running,
+}: {
+  output: Record<string, unknown> | null;
+  running: boolean;
+}) {
+  const content = output ? (
+    <div className="output-content">
+      {Object.entries(output).map(([key, value]) => (
+        <div className="output-row" key={key}>
+          <span>{humanizeKey(key)}</span>
+          <strong>{formatOutputValue(value)}</strong>
+        </div>
+      ))}
+    </div>
+  ) : (
+    <div className="empty-output">No output yet.</div>
+  );
+
+  return (
+    <div className="output-frame">
+      <div className={running ? "output-blur" : ""}>{content}</div>
+      {running ? (
+        <div className="output-overlay">
+          <div className="sync-spinner" aria-label="Updating" role="status" />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function humanizeKey(key: string) {
+  return key.replace(/_/g, " ");
+}
+
+function formatOutputValue(value: unknown) {
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  return JSON.stringify(value);
+}
+
+function outputClipboardText(output: Record<string, unknown>) {
+  if (typeof output.text === "string" && Object.keys(output).length === 1) {
+    return output.text;
+  }
+
+  return Object.entries(output)
+    .map(([key, value]) => `${humanizeKey(key)}: ${formatOutputValue(value)}`)
+    .join("\n");
 }

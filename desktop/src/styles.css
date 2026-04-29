@@ -210,7 +210,7 @@ textarea {
 }
 
 .tool span,
-.tool small {
+.tool-example {
   display: block;
 }
 
@@ -218,10 +218,24 @@ textarea {
   font-weight: 700;
 }
 
-.tool small {
+.tool-example {
+  align-items: center;
   color: #64707d;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   line-height: 1.35;
   margin-top: 6px;
+}
+
+.tool-example span {
+  color: #2b343b;
+  font-size: 13px;
+}
+
+.tool-example svg {
+  color: #20865b;
+  font-size: 11px;
 }
 
 .runner {
@@ -238,40 +252,109 @@ textarea {
 textarea {
   border: 1px solid #cbd3cf;
   border-radius: 8px;
-  min-height: 180px;
+  height: 220px;
+  overflow: auto;
   padding: 12px;
-  resize: vertical;
+  resize: none;
 }
 
-.run-button {
-  background: #1d2329;
+.copy-button {
+  align-items: center;
+  background: transparent;
   border: 0;
-  border-radius: 8px;
-  color: #fff;
+  border-radius: 50%;
+  color: #1d2329;
   cursor: pointer;
-  min-height: 42px;
-  padding: 0 18px;
-  width: fit-content;
+  display: inline-flex;
+  font-size: 20px;
+  height: 34px;
+  justify-content: center;
+  padding: 0;
+  width: 34px;
 }
 
-.run-button:disabled {
+.copy-button:hover:not(:disabled) {
+  background: #edf2ef;
+}
+
+.copy-button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
 
-pre {
-  background: #15191d;
+.output-frame {
+  position: relative;
+}
+
+.output-blur {
+  filter: blur(2px);
+  opacity: 0.62;
+  pointer-events: none;
+}
+
+.output-overlay {
+  align-items: center;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  position: absolute;
+}
+
+.output-content,
+.empty-output {
+  background: #f6f8f7;
+  border: 1px solid #d8ddd8;
   border-radius: 8px;
-  color: #e8efec;
   min-height: 280px;
-  margin: 0;
-  overflow: auto;
-  padding: 14px;
+}
+
+.output-content {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.empty-output {
+  align-items: center;
+  color: #64707d;
+  display: flex;
+  justify-content: center;
+}
+
+.output-row {
+  background: #ffffff;
+  border: 1px solid #dbe1de;
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+
+.output-row span {
+  color: #73808b;
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.output-row strong {
+  color: #1d2329;
+  font-size: 16px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
 .error-text {
   color: #ba3f3f;
+}
+
+.sync-spinner {
+  animation: spin 0.8s linear infinite;
+  border: 2px solid #d8ddd8;
+  border-radius: 50%;
+  border-top-color: #20865b;
+  height: 24px;
+  width: 24px;
 }
 
 .app-footer {
@@ -281,6 +364,12 @@ pre {
   margin: 18px auto 0;
   max-width: 1280px;
   width: 100%;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 960px) {
