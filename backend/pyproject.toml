@@ -3,6 +3,10 @@ name = "nekora-core"
 version = "0.1.0"
 description = "Local-first Nekora host backend with external module support."
 requires-python = ">=3.12"
+authors = [
+    { name = "Ziyi LIU" },
+]
+license = "GPL-3.0-only"
 dependencies = [
     "fastapi>=0.115.0",
     "pydantic>=2.8.0",
@@ -21,4 +25,3 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["nekora_core"]
-

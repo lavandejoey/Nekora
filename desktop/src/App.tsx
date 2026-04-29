@@ -1,8 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { ModuleInfo, ToolInfo, ToolRunResponse, api } from "./api";
+import logoUrl from "./assets/Nekora.png";
 
 type LoadState = "loading" | "ready" | "error";
+
+function copyrightText() {
+  const startYear = 2026;
+  const currentYear = new Date().getFullYear();
+  const yearText =
+    currentYear > startYear ? `${startYear}-${currentYear}` : `${startYear}`;
+  return `Copyright © ${yearText} Ziyi LIU`;
+}
 
 export function App() {
   const [loadState, setLoadState] = useState<LoadState>("loading");
@@ -61,9 +70,12 @@ export function App() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div>
-          <h1>Nekora</h1>
-          <p>Core host {version ? `v${version}` : ""}</p>
+        <div className="brand">
+          <img alt="" className="brand-logo" src={logoUrl} />
+          <div>
+            <h1>Nekora</h1>
+            <p>Core host {version ? `v${version}` : ""}</p>
+          </div>
         </div>
         <div className={`status status-${loadState}`}>
           <span />
@@ -152,7 +164,7 @@ export function App() {
           </section>
         </section>
       )}
+      <footer className="app-footer">{copyrightText()}</footer>
     </main>
   );
 }
-

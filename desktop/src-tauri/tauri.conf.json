@@ -26,7 +26,10 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": []
+    "icon": [
+      "icons/Nekora.ico",
+      "icons/Nekora.png"
+    ],
+    "copyright": "Copyright © 2026 Ziyi LIU"
   }
 }
-

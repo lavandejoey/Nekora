@@ -1,5 +1,7 @@
 # Nekora
 
+Copyright © 2026 Ziyi LIU.
+
 Nekora is a local-first desktop toolkit host. The core app provides the
 desktop UI, backend API, module manager, shared SDK, settings, history, and
 permission boundaries. Tool implementations live in built-in or external

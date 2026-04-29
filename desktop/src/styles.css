@@ -24,6 +24,8 @@ textarea {
 }
 
 .app-shell {
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
   padding: 24px;
 }
@@ -35,6 +37,7 @@ textarea {
   gap: 16px;
   margin: 0 auto 20px;
   max-width: 1280px;
+  width: 100%;
 }
 
 .topbar h1,
@@ -48,6 +51,20 @@ textarea {
 .topbar h1 {
   font-size: 30px;
   font-weight: 760;
+}
+
+.brand {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.brand-logo {
+  border-radius: 8px;
+  height: 48px;
+  object-fit: cover;
+  width: 48px;
 }
 
 .topbar p {
@@ -84,6 +101,7 @@ textarea {
 
 .workspace {
   display: grid;
+  flex: 1;
   gap: 16px;
   grid-template-columns: minmax(240px, 0.8fr) minmax(360px, 1.3fr) minmax(280px, 1fr);
   margin: 0 auto;
@@ -252,6 +270,14 @@ pre {
   color: #ba3f3f;
 }
 
+.app-footer {
+  color: #64707d;
+  font-size: 13px;
+  margin: 18px auto 0;
+  max-width: 1280px;
+  width: 100%;
+}
+
 @media (max-width: 960px) {
   .workspace {
     grid-template-columns: 1fr;
@@ -268,4 +294,3 @@ pre {
     flex-direction: column;
   }
 }
-
