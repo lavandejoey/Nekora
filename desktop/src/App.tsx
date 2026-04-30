@@ -204,7 +204,7 @@ export function App() {
         />
       )}
       {historyOpen && <HistoryModal history={history} onClose={() => setHistoryOpen(false)} onRestore={restoreHistory} />}
-      {aboutOpen && <AboutModal version={version} onClose={() => setAboutOpen(false)} />}
+      {aboutOpen && <AboutModal version={version} onClose={() => setAboutOpen(false)} onOpenDocs={() => window.open("https://github.com/lavandejoey/Nekora", "_blank")} />}
     </main>
   );
 }
