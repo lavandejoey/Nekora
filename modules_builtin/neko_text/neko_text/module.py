@@ -40,7 +40,21 @@ def lowercase(input_data: dict[str, Any], _context: ToolContext) -> dict[str, An
 def count_text(input_data: dict[str, Any], _context: ToolContext) -> dict[str, Any]:
     text = _text_value(input_data)
     words = [part for part in text.split() if part]
-    return {"characters": len(text), "words": len(words), "lines": len(text.splitlines())}
+    non_space_characters = sum(1 for char in text if not char.isspace())
+    word_or_character_units = sum(
+        1 if any(char.isalnum() and char.isascii() for char in part) else len(part)
+        for part in words
+    )
+    lines = len(text.splitlines()) if text else 0
+    pages = max(1, (word_or_character_units + 499) // 500) if text.strip() else 0
+    return {
+        "pages": pages,
+        "lines": lines,
+        "words": len(words),
+        "characters": len(text),
+        "characters_no_spaces": non_space_characters,
+        "word_or_character_units": word_or_character_units,
+    }
 
 
 def create_module() -> NekoraModule:
@@ -71,20 +85,29 @@ def create_module() -> NekoraModule:
             ),
             NekoraTool(
                 id="text.count",
-                name="Count Text",
-                description="Count characters, words, and lines.",
+                name="Statistics",
+                description="Measure text length, lines, words, and pages.",
                 input_schema=TEXT_INPUT_SCHEMA,
                 output_schema={
                     "type": "object",
-                    "required": ["characters", "words", "lines"],
+                    "required": [
+                        "pages",
+                        "lines",
+                        "words",
+                        "characters",
+                        "characters_no_spaces",
+                        "word_or_character_units",
+                    ],
                     "properties": {
-                        "characters": {"type": "integer"},
-                        "words": {"type": "integer"},
+                        "pages": {"type": "integer"},
                         "lines": {"type": "integer"},
+                        "words": {"type": "integer"},
+                        "characters": {"type": "integer"},
+                        "characters_no_spaces": {"type": "integer"},
+                        "word_or_character_units": {"type": "integer"},
                     },
                 },
                 run=count_text,
             ),
         ),
     )
-

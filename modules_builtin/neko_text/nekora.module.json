@@ -2,7 +2,7 @@
   "id": "nekora.neko_text",
   "name": "NekoText",
   "version": "0.1.0",
-  "description": "Basic text utilities for the Nekora core MVP.",
+  "description": "Basic text utilities and statistics for the Nekora core MVP.",
   "entry": "neko_text.module:create_module",
   "author": "Nekora",
   "runtime": "python",
@@ -10,4 +10,3 @@
   "permissions": [],
   "tools": ["text.uppercase", "text.lowercase", "text.count"]
 }
-

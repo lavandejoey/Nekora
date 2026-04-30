@@ -75,6 +75,10 @@ scripts/run_desktop_dev.sh
 The UI expects the backend at `http://127.0.0.1:8000`. Override with
 `VITE_NEKORA_API_BASE` if needed.
 
+Text input is capped at 100,000 characters. Typed or pasted text runs live;
+loaded `.txt` files and direct `.txt` links require pressing Process Text before
+the output updates. File/link results can be downloaded from the output panel.
+
 ## Runtime Modes
 
 Nekora has three local run modes:

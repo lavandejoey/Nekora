@@ -1,11 +1,22 @@
-import { faCaretRight, faCheck, faCopy } from "@fortawesome/free-solid-svg-icons";
+import {
+  faCaretRight,
+  faCheck,
+  faCopy,
+  faDownload,
+  faFolderOpen,
+  faLink,
+  faPaste,
+} from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { ModuleInfo, ToolInfo, ToolRunResponse, api } from "./api";
 import logoUrl from "./assets/Nekora.png";
 
 type LoadState = "loading" | "ready" | "error";
+type InputOrigin = "text" | "file" | "link";
+
+const MAX_TEXT_LENGTH = 100_000;
 
 function copyrightText() {
   const startYear = 2026;
@@ -25,9 +36,15 @@ export function App() {
   const [inputText, setInputText] = useState(
     "Hello from Nekora.\n你好 Nekora。\nこんにちは、ネコラ。",
   );
+  const [inputOrigin, setInputOrigin] = useState<InputOrigin>("text");
+  const [inputName, setInputName] = useState("");
+  const [linkValue, setLinkValue] = useState("");
   const [result, setResult] = useState<ToolRunResponse | null>(null);
+  const [resultOrigin, setResultOrigin] = useState<InputOrigin>("text");
+  const [resultName, setResultName] = useState("");
   const [running, setRunning] = useState(false);
   const [copied, setCopied] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const runIdRef = useRef(0);
 
   useEffect(() => {
@@ -59,6 +76,7 @@ export function App() {
 
   useEffect(() => {
     if (!selectedTool || loadState !== "ready") return;
+    if (inputOrigin !== "text") return;
 
     const runId = runIdRef.current + 1;
     runIdRef.current = runId;
@@ -67,29 +85,128 @@ export function App() {
     setCopied(false);
 
     const timeout = window.setTimeout(async () => {
-      try {
-        const response = await api.runTool(selectedTool.id, { text: inputText });
-        if (runIdRef.current === runId) {
-          setResult(response);
-        }
-      } catch (err) {
-        if (runIdRef.current === runId) {
-          setError(err instanceof Error ? err.message : String(err));
-        }
-      } finally {
-        if (runIdRef.current === runId) {
-          setRunning(false);
-        }
+      if (inputText.length > MAX_TEXT_LENGTH) {
+        setError(`Text is limited to ${MAX_TEXT_LENGTH.toLocaleString()} characters.`);
+        setRunning(false);
+        return;
       }
+      await runSelectedTool("text", "");
     }, 160);
 
     return () => window.clearTimeout(timeout);
-  }, [inputText, loadState, selectedTool]);
+  }, [inputOrigin, inputText, loadState, selectedTool]);
+
+  async function runSelectedTool(origin: InputOrigin, name: string) {
+    if (!selectedTool) return;
+    if (inputText.length > MAX_TEXT_LENGTH) {
+      setError(`Text is limited to ${MAX_TEXT_LENGTH.toLocaleString()} characters.`);
+      return;
+    }
+
+    const runId = runIdRef.current + 1;
+    runIdRef.current = runId;
+    setRunning(true);
+    setError("");
+    setCopied(false);
+
+    try {
+      const response = await api.runTool(selectedTool.id, { text: inputText });
+      if (runIdRef.current === runId) {
+        setResult(response);
+        setResultOrigin(origin);
+        setResultName(name);
+      }
+    } catch (err) {
+      if (runIdRef.current === runId) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      if (runIdRef.current === runId) {
+        setRunning(false);
+      }
+    }
+  }
+
+  function updateTypedText(value: string) {
+    setInputOrigin("text");
+    setInputName("");
+    setInputText(limitText(value));
+  }
+
+  async function loadTextFile(file: File) {
+    if (!file.name.toLowerCase().endsWith(".txt") && file.type !== "text/plain") {
+      setError("Only .txt files are supported now.");
+      return;
+    }
+
+    const text = await file.text();
+    if (text.length > MAX_TEXT_LENGTH) {
+      setError(`File text is limited to ${MAX_TEXT_LENGTH.toLocaleString()} characters.`);
+      return;
+    }
+
+    setInputOrigin("file");
+    setInputName(file.name);
+    setInputText(text);
+    setResult(null);
+    setError("");
+  }
+
+  async function loadTextLink() {
+    const url = linkValue.trim();
+    if (!url) return;
+    if (!url.toLowerCase().endsWith(".txt")) {
+      setError("Only direct .txt links are supported now.");
+      return;
+    }
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      setError(`Could not load text link: ${response.status}`);
+      return;
+    }
+
+    const text = await response.text();
+    if (text.length > MAX_TEXT_LENGTH) {
+      setError(`Linked text is limited to ${MAX_TEXT_LENGTH.toLocaleString()} characters.`);
+      return;
+    }
+
+    setInputOrigin("link");
+    setInputName(url);
+    setInputText(text);
+    setResult(null);
+    setError("");
+  }
+
+  function chooseFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (file) void loadTextFile(file);
+    event.target.value = "";
+  }
+
+  function dropFile(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const file = event.dataTransfer.files[0];
+    if (file) void loadTextFile(file);
+  }
 
   async function copyOutput() {
     if (!result) return;
     await navigator.clipboard.writeText(outputClipboardText(result.output));
     setCopied(true);
+  }
+
+  function downloadOutput() {
+    if (!result || resultOrigin === "text") return;
+    const content = outputClipboardText(result.output);
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = outputFileName(resultName, selectedTool?.id ?? "output");
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
   return (
@@ -163,27 +280,108 @@ export function App() {
 
             <div className="runner">
               <label htmlFor="tool-input">Input</label>
-              <textarea
-                id="tool-input"
-                value={inputText}
-                onChange={(event) => setInputText(event.target.value)}
+              <div className="input-frame">
+                <textarea
+                  id="tool-input"
+                  value={inputText}
+                  onChange={(event) => updateTypedText(event.target.value)}
+                />
+                <span>
+                  {inputText.length.toLocaleString()} / {MAX_TEXT_LENGTH.toLocaleString()}
+                </span>
+              </div>
+              <div
+                className="source-box"
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={dropFile}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    fileInputRef.current?.click();
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+              >
+                <div className="source-main">
+                  <FontAwesomeIcon icon={faFolderOpen} />
+                  <div>
+                    <strong>{inputName || "Drop .txt here or click to browse"}</strong>
+                    <span>
+                      {inputOrigin === "text"
+                        ? "Files and links wait for manual processing"
+                        : "Loaded text waits for manual processing"}
+                    </span>
+                  </div>
+                </div>
+                <div className="link-row" onClick={(event) => event.stopPropagation()}>
+                  <FontAwesomeIcon icon={faLink} />
+                  <input
+                    aria-label="Text link"
+                    onChange={(event) => setLinkValue(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void loadTextLink();
+                    }}
+                    placeholder="https://example.com/file.txt"
+                    type="url"
+                    value={linkValue}
+                  />
+                  <button
+                    className="link-load-button"
+                    aria-label="Load text link"
+                    onClick={loadTextLink}
+                    type="button"
+                  >
+                    <FontAwesomeIcon icon={faPaste} />
+                  </button>
+                </div>
+              </div>
+              <input
+                accept=".txt,text/plain"
+                hidden
+                onChange={chooseFile}
+                ref={fileInputRef}
+                type="file"
               />
+              {inputOrigin !== "text" ? (
+                <button
+                  className="process-button"
+                  disabled={running || !selectedTool}
+                  onClick={() => runSelectedTool(inputOrigin, inputName)}
+                  type="button"
+                >
+                  Process Text
+                </button>
+              ) : null}
             </div>
           </section>
 
           <section className="panel output-panel">
             <div className="panel-header">
               <h2>Output</h2>
-              <button
-                className="copy-button"
-                aria-label="Copy output"
-                title="Copy output"
-                disabled={!result}
-                onClick={copyOutput}
-                type="button"
-              >
-                <FontAwesomeIcon icon={copied ? faCheck : faCopy} />
-              </button>
+              <div className="panel-header-actions">
+                <button
+                  className="copy-button"
+                  aria-label="Copy output"
+                  title="Copy output"
+                  disabled={!result}
+                  onClick={copyOutput}
+                  type="button"
+                >
+                  <FontAwesomeIcon icon={copied ? faCheck : faCopy} />
+                </button>
+                {result && resultOrigin !== "text" ? (
+                  <button
+                    className="copy-button"
+                    aria-label="Download output"
+                    title="Download output"
+                    onClick={downloadOutput}
+                    type="button"
+                  >
+                    <FontAwesomeIcon icon={faDownload} />
+                  </button>
+                ) : null}
+              </div>
             </div>
             {error ? <p className="error-text">{error}</p> : null}
             <OutputView output={result?.output ?? null} running={running} />
@@ -199,7 +397,7 @@ function ToolExample({ toolId }: { toolId: string }) {
   const examples: Record<string, [string, string]> = {
     "text.uppercase": ["abc", "ABC"],
     "text.lowercase": ["ABC", "abc"],
-    "text.count": ["text", "4"],
+    "text.count": ["Hello", "#5"],
   };
   const [before, after] = examples[toolId] ?? ["input", "output"];
 
@@ -245,7 +443,11 @@ function OutputView({
 }
 
 function humanizeKey(key: string) {
-  return key.replace(/_/g, " ");
+  const labels: Record<string, string> = {
+    characters_no_spaces: "Characters no spaces",
+    word_or_character_units: "Word / character units",
+  };
+  return labels[key] ?? key.replace(/_/g, " ");
 }
 
 function formatOutputValue(value: unknown) {
@@ -268,4 +470,14 @@ function outputClipboardText(output: Record<string, unknown>) {
   return Object.entries(output)
     .map(([key, value]) => `${humanizeKey(key)}: ${formatOutputValue(value)}`)
     .join("\n");
+}
+
+function limitText(value: string) {
+  return value.length > MAX_TEXT_LENGTH ? value.slice(0, MAX_TEXT_LENGTH) : value;
+}
+
+function outputFileName(sourceName: string, toolId: string) {
+  const baseName = sourceName.split(/[\\/]/).pop()?.replace(/\.txt$/i, "") || "nekora-output";
+  const suffix = toolId.replace(/\W+/g, "-");
+  return `${baseName}.${suffix}.txt`;
 }
