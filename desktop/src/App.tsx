@@ -1,63 +1,47 @@
-import {
-  faCaretRight,
-  faCheck,
-  faCopy,
-  faDownload,
-  faFolderOpen,
-  faLink,
-  faPaste,
-} from "@fortawesome/free-solid-svg-icons";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from "react";
-
-import { ModuleInfo, ToolInfo, ToolRunResponse, api } from "./api";
-import logoUrl from "./assets/Nekora.png";
+// desktop/src/App.tsx
+import { useEffect, useMemo, useRef, useState } from "react";
+import { api, ModuleInfo, ToolInfo, ToolRunResponse } from "./api";
+import { AboutModal } from "./components/AboutModal";
+import { CommandBar } from "./components/CommandBar";
+import { HistoryModal, RunHistoryItem } from "./components/HistoryModal";
+import { ModuleModal } from "./components/ModuleModal";
+import { OutputPanel } from "./components/OutputPanel";
+import { Sidebar } from "./components/Sidebar";
+import { ToolWorkspace } from "./components/ToolWorkspace";
 
 type LoadState = "loading" | "ready" | "error";
 type InputOrigin = "text" | "file" | "link";
+type InputState = { text: string; url: string; files: File[] };
 
-const MAX_TEXT_LENGTH = 100_000;
-
-function copyrightText() {
-  const startYear = 2026;
-  const currentYear = new Date().getFullYear();
-  const yearText =
-    currentYear > startYear ? `${startYear}-${currentYear}` : `${startYear}`;
-  return `Copyright © ${yearText} Ziyi LIU`;
-}
+// const DEFAULT_TEXT = "Hello from Nekora.\n你好 Nekora。\nこんにちは、ネコラ。";
 
 export function App() {
   const [loadState, setLoadState] = useState<LoadState>("loading");
-  const [error, setError] = useState<string>("");
-  const [version, setVersion] = useState<string>("");
+  const [error, setError] = useState("");
+  const [version, setVersion] = useState("");
   const [modules, setModules] = useState<ModuleInfo[]>([]);
   const [tools, setTools] = useState<ToolInfo[]>([]);
-  const [selectedToolId, setSelectedToolId] = useState<string>("");
-  const [inputText, setInputText] = useState(
-    "Hello from Nekora.\n你好 Nekora。\nこんにちは、ネコラ。",
-  );
-  const [inputOrigin, setInputOrigin] = useState<InputOrigin>("text");
-  const [inputName, setInputName] = useState("");
-  const [linkValue, setLinkValue] = useState("");
+  const [selectedModuleId, setSelectedModuleId] = useState("builtin.neko_text");
+  const [selectedToolId, setSelectedToolId] = useState("");
+  const [search, setSearch] = useState("");
+  const [input, setInput] = useState<InputState>({ text: "", url: "", files: [] });
   const [result, setResult] = useState<ToolRunResponse | null>(null);
-  const [resultOrigin, setResultOrigin] = useState<InputOrigin>("text");
-  const [resultName, setResultName] = useState("");
   const [running, setRunning] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [executionTimeMs, setExecutionTimeMs] = useState<number | null>(null);
+  const [history, setHistory] = useState<RunHistoryItem[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [moduleOpen, setModuleOpen] = useState(false);
   const runIdRef = useRef(0);
 
   useEffect(() => {
     async function load() {
       try {
-        const [health, moduleList, toolList] = await Promise.all([
-          api.health(),
-          api.modules(),
-          api.tools(),
-        ]);
+        const [health, moduleList, toolList] = await Promise.all([api.health(), api.modules(), api.tools()]);
         setVersion(health.version);
         setModules(moduleList);
         setTools(toolList);
+        setSelectedModuleId(moduleList[0]?.id ?? "builtin.neko_text");
         setSelectedToolId(toolList[0]?.id ?? "");
         setLoadState("ready");
       } catch (err) {
@@ -65,419 +49,162 @@ export function App() {
         setLoadState("error");
       }
     }
-
     void load();
   }, []);
 
-  const selectedTool = useMemo(
-    () => tools.find((tool) => tool.id === selectedToolId),
-    [selectedToolId, tools],
-  );
+  const filteredTools = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return tools;
+    return tools.filter((t) => t.name.toLowerCase().includes(q) || t.id.toLowerCase().includes(q) || t.module_id.toLowerCase().includes(q));
+  }, [search, tools]);
+
+  const selectedTool = useMemo(() => tools.find((tool) => tool.id === selectedToolId), [selectedToolId, tools]);
+  const selectedToolMode = useMemo(() => {
+    if (!selectedTool) return { allowText: true, allowUrl: true, allowFiles: true, maxFiles: 3 };
+    if (selectedTool.id === "text.uppercase" || selectedTool.id === "text.lowercase") {
+      return { allowText: true, allowUrl: false, allowFiles: false, maxFiles: 0 };
+    }
+    if (selectedTool.id === "text.count") {
+      return { allowText: true, allowUrl: true, allowFiles: true, maxFiles: 1 };
+    }
+    return { allowText: true, allowUrl: true, allowFiles: true, maxFiles: 3 };
+  }, [selectedTool]);
+  const inputOrigin: InputOrigin = input.files.length > 0 ? "file" : input.url.trim() ? "link" : "text";
 
   useEffect(() => {
-    if (!selectedTool || loadState !== "ready") return;
-    if (inputOrigin !== "text") return;
-
-    const runId = runIdRef.current + 1;
-    runIdRef.current = runId;
-    setRunning(true);
+    setInput({ text: "", url: "", files: [] });
+    setResult(null);
+    setExecutionTimeMs(null);
     setError("");
-    setCopied(false);
+  }, [selectedToolId]);
 
-    const timeout = window.setTimeout(async () => {
-      if (inputText.length > MAX_TEXT_LENGTH) {
-        setError(`Text is limited to ${MAX_TEXT_LENGTH.toLocaleString()} characters.`);
-        setRunning(false);
-        return;
-      }
-      await runSelectedTool("text", "");
-    }, 160);
-
-    return () => window.clearTimeout(timeout);
-  }, [inputOrigin, inputText, loadState, selectedTool]);
-
-  async function runSelectedTool(origin: InputOrigin, name: string) {
+  async function runSelectedTool() {
     if (!selectedTool) return;
-    if (inputText.length > MAX_TEXT_LENGTH) {
-      setError(`Text is limited to ${MAX_TEXT_LENGTH.toLocaleString()} characters.`);
-      return;
-    }
-
-    const runId = runIdRef.current + 1;
-    runIdRef.current = runId;
+    const runId = ++runIdRef.current;
+    const start = performance.now();
     setRunning(true);
     setError("");
-    setCopied(false);
 
     try {
-      const response = await api.runTool(selectedTool.id, { text: inputText });
-      if (runIdRef.current === runId) {
-        setResult(response);
-        setResultOrigin(origin);
-        setResultName(name);
+      const payload: Record<string, unknown> = {};
+      const isStatLike = selectedTool.id === "text.count";
+      if (!isStatLike || input.files.length === 0) {
+        payload.text = input.text;
       }
+      if (input.url.trim()) payload.url = input.url.trim();
+      if (input.files.length > 0) {
+        const primaryFile = input.files[0];
+        const primaryText = await primaryFile.text();
+        payload.files = await Promise.all(
+          input.files.map(async (file) => ({
+            name: file.name,
+            text: await file.text(),
+          }))
+        );
+        payload.file_name = primaryFile.name;
+        payload.file_text = primaryText;
+        if (!payload.text) payload.text = primaryText;
+        if (isStatLike) payload.text = "";
+      }
+      const response = await api.runTool(selectedTool.id, payload);
+      if (runId !== runIdRef.current) return;
+      const elapsed = Math.max(1, Math.round(performance.now() - start));
+      setExecutionTimeMs(elapsed);
+      setResult(response);
+      setHistory((prev) =>
+        [
+          {
+            id: crypto.randomUUID(),
+            toolId: selectedTool.id,
+            toolName: selectedTool.name,
+            timestamp: Date.now(),
+            snippet: String(
+              (response.output.text ?? response.output.result ?? JSON.stringify(response.output)).toString()
+            ).slice(0, 120),
+            input: { ...input },
+            output: response,
+            executionTimeMs: elapsed,
+          },
+          ...prev,
+        ].slice(0, 40)
+      );
     } catch (err) {
-      if (runIdRef.current === runId) {
+      if (runId === runIdRef.current) {
         setError(err instanceof Error ? err.message : String(err));
       }
     } finally {
-      if (runIdRef.current === runId) {
-        setRunning(false);
-      }
+      if (runId === runIdRef.current) setRunning(false);
     }
   }
 
-  function updateTypedText(value: string) {
-    setInputOrigin("text");
-    setInputName("");
-    setInputText(limitText(value));
+  function onSearchEnter() {
+    if (filteredTools[0]) setSelectedToolId(filteredTools[0].id);
   }
 
-  async function loadTextFile(file: File) {
-    if (!file.name.toLowerCase().endsWith(".txt") && file.type !== "text/plain") {
-      setError("Only .txt files are supported now.");
-      return;
-    }
-
-    const text = await file.text();
-    if (text.length > MAX_TEXT_LENGTH) {
-      setError(`File text is limited to ${MAX_TEXT_LENGTH.toLocaleString()} characters.`);
-      return;
-    }
-
-    setInputOrigin("file");
-    setInputName(file.name);
-    setInputText(text);
+  function clearInput() {
+    setInput({ text: "", url: "", files: [] });
     setResult(null);
+    setExecutionTimeMs(null);
     setError("");
   }
 
-  async function loadTextLink() {
-    const url = linkValue.trim();
-    if (!url) return;
-    if (!url.toLowerCase().endsWith(".txt")) {
-      setError("Only direct .txt links are supported now.");
-      return;
-    }
-
-    const response = await fetch(url);
-    if (!response.ok) {
-      setError(`Could not load text link: ${response.status}`);
-      return;
-    }
-
-    const text = await response.text();
-    if (text.length > MAX_TEXT_LENGTH) {
-      setError(`Linked text is limited to ${MAX_TEXT_LENGTH.toLocaleString()} characters.`);
-      return;
-    }
-
-    setInputOrigin("link");
-    setInputName(url);
-    setInputText(text);
-    setResult(null);
-    setError("");
-  }
-
-  function chooseFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (file) void loadTextFile(file);
-    event.target.value = "";
-  }
-
-  function dropFile(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    const file = event.dataTransfer.files[0];
-    if (file) void loadTextFile(file);
-  }
-
-  async function copyOutput() {
-    if (!result) return;
-    await navigator.clipboard.writeText(outputClipboardText(result.output));
-    setCopied(true);
-  }
-
-  function downloadOutput() {
-    if (!result || resultOrigin === "text") return;
-    const content = outputClipboardText(result.output);
-    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = outputFileName(resultName, selectedTool?.id ?? "output");
-    anchor.click();
-    URL.revokeObjectURL(url);
+  function restoreHistory(item: RunHistoryItem) {
+    setSelectedToolId(item.toolId);
+    setInput(item.input);
+    setResult(item.output);
+    setExecutionTimeMs(item.executionTimeMs);
+    setHistoryOpen(false);
   }
 
   return (
     <main className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <img alt="" className="brand-logo" src={logoUrl} />
-          <div>
-            <h1>Nekora</h1>
-            <p>Core host {version ? `v${version}` : ""}</p>
-          </div>
+      <Sidebar
+        version={version}
+        modules={modules}
+        tools={filteredTools}
+        selectedToolId={selectedToolId}
+        selectedModuleId={selectedModuleId}
+        onSelectTool={setSelectedToolId}
+        onOpenModules={() => setModuleOpen(true)}
+      />
+      <div className="main-content">
+        <CommandBar
+          search={search}
+          onSearchChange={setSearch}
+          onSearchEnter={onSearchEnter}
+          onOpenAbout={() => setAboutOpen(true)}
+          onOpenHistory={() => setHistoryOpen(true)}
+          status={loadState === "ready" ? "Ready" : "Loading"}
+        />
+        <div className="workspace-container">
+          <ToolWorkspace
+            key={selectedToolId}
+            tool={selectedTool}
+            input={input}
+            inputOrigin={inputOrigin}
+            onInputChange={setInput}
+            onClear={clearInput}
+            onRun={runSelectedTool}
+            running={running}
+            allowText={selectedToolMode.allowText}
+            allowUrl={selectedToolMode.allowUrl}
+            allowFiles={selectedToolMode.allowFiles}
+            maxFiles={selectedToolMode.maxFiles}
+          />
+          <OutputPanel result={result} executionTimeMs={executionTimeMs} />
         </div>
-        <div className={`status status-${loadState}`}>
-          <span />
-          {loadState}
-        </div>
-      </header>
-
-      {loadState === "error" ? (
-        <section className="notice">
-          <h2>Backend unavailable</h2>
-          <p>{error}</p>
-        </section>
-      ) : (
-        <section className="workspace">
-          <aside className="panel module-panel">
-            <div className="panel-header">
-              <h2>Modules</h2>
-              <span>{modules.length}</span>
-            </div>
-            <div className="module-list">
-              {modules.map((module) => (
-                <article className="module-item" key={module.id}>
-                  <div>
-                    <h3>{module.name}</h3>
-                    <p>{module.description}</p>
-                  </div>
-                  <dl>
-                    <div>
-                      <dt>Source</dt>
-                      <dd>{module.source}</dd>
-                    </div>
-                    <div>
-                      <dt>Tools</dt>
-                      <dd>{module.tools.length}</dd>
-                    </div>
-                  </dl>
-                </article>
-              ))}
-            </div>
-          </aside>
-
-          <section className="panel tool-panel">
-            <div className="panel-header">
-              <h2>Tools</h2>
-              <span>{tools.length}</span>
-            </div>
-            <div className="tool-grid">
-              {tools.map((tool) => (
-                <button
-                  className={tool.id === selectedToolId ? "tool active" : "tool"}
-                  key={tool.id}
-                  onClick={() => setSelectedToolId(tool.id)}
-                  type="button"
-                >
-                  <span>{tool.name}</span>
-                  <ToolExample toolId={tool.id} />
-                </button>
-              ))}
-            </div>
-
-            <div className="runner">
-              <label htmlFor="tool-input">Input</label>
-              <div className="input-frame">
-                <textarea
-                  id="tool-input"
-                  value={inputText}
-                  onChange={(event) => updateTypedText(event.target.value)}
-                />
-                <span>
-                  {inputText.length.toLocaleString()} / {MAX_TEXT_LENGTH.toLocaleString()}
-                </span>
-              </div>
-              <div
-                className="source-box"
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={dropFile}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    fileInputRef.current?.click();
-                  }
-                }}
-                role="button"
-                tabIndex={0}
-              >
-                <div className="source-main">
-                  <FontAwesomeIcon icon={faFolderOpen} />
-                  <div>
-                    <strong>{inputName || "Drop .txt here or click to browse"}</strong>
-                    <span>
-                      {inputOrigin === "text"
-                        ? "Files and links wait for manual processing"
-                        : "Loaded text waits for manual processing"}
-                    </span>
-                  </div>
-                </div>
-                <div className="link-row" onClick={(event) => event.stopPropagation()}>
-                  <FontAwesomeIcon icon={faLink} />
-                  <input
-                    aria-label="Text link"
-                    onChange={(event) => setLinkValue(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") void loadTextLink();
-                    }}
-                    placeholder="https://example.com/file.txt"
-                    type="url"
-                    value={linkValue}
-                  />
-                  <button
-                    className="link-load-button"
-                    aria-label="Load text link"
-                    onClick={loadTextLink}
-                    type="button"
-                  >
-                    <FontAwesomeIcon icon={faPaste} />
-                  </button>
-                </div>
-              </div>
-              <input
-                accept=".txt,text/plain"
-                hidden
-                onChange={chooseFile}
-                ref={fileInputRef}
-                type="file"
-              />
-              {inputOrigin !== "text" ? (
-                <button
-                  className="process-button"
-                  disabled={running || !selectedTool}
-                  onClick={() => runSelectedTool(inputOrigin, inputName)}
-                  type="button"
-                >
-                  Process Text
-                </button>
-              ) : null}
-            </div>
-          </section>
-
-          <section className="panel output-panel">
-            <div className="panel-header">
-              <h2>Output</h2>
-              <div className="panel-header-actions">
-                <button
-                  className="copy-button"
-                  aria-label="Copy output"
-                  title="Copy output"
-                  disabled={!result}
-                  onClick={copyOutput}
-                  type="button"
-                >
-                  <FontAwesomeIcon icon={copied ? faCheck : faCopy} />
-                </button>
-                {result && resultOrigin !== "text" ? (
-                  <button
-                    className="copy-button"
-                    aria-label="Download output"
-                    title="Download output"
-                    onClick={downloadOutput}
-                    type="button"
-                  >
-                    <FontAwesomeIcon icon={faDownload} />
-                  </button>
-                ) : null}
-              </div>
-            </div>
-            {error ? <p className="error-text">{error}</p> : null}
-            <OutputView output={result?.output ?? null} running={running} />
-          </section>
-        </section>
+        {error && <div className="error-banner">{error}</div>}
+      </div>
+      {moduleOpen && (
+        <ModuleModal
+          modules={modules}
+          selectedModuleId={selectedModuleId}
+          onClose={() => setModuleOpen(false)}
+          onSelect={setSelectedModuleId}
+        />
       )}
-      <footer className="app-footer">{copyrightText()}</footer>
+      {historyOpen && <HistoryModal history={history} onClose={() => setHistoryOpen(false)} onRestore={restoreHistory} />}
+      {aboutOpen && <AboutModal version={version} onClose={() => setAboutOpen(false)} />}
     </main>
   );
-}
-
-function ToolExample({ toolId }: { toolId: string }) {
-  const examples: Record<string, [string, string]> = {
-    "text.uppercase": ["abc", "ABC"],
-    "text.lowercase": ["ABC", "abc"],
-    "text.count": ["Hello", "#5"],
-  };
-  const [before, after] = examples[toolId] ?? ["input", "output"];
-
-  return (
-    <small className="tool-example">
-      <span>{before}</span>
-      <FontAwesomeIcon icon={faCaretRight} />
-      <span>{after}</span>
-    </small>
-  );
-}
-
-function OutputView({
-  output,
-  running,
-}: {
-  output: Record<string, unknown> | null;
-  running: boolean;
-}) {
-  const content = output ? (
-    <div className="output-content">
-      {Object.entries(output).map(([key, value]) => (
-        <div className="output-row" key={key}>
-          <span>{humanizeKey(key)}</span>
-          <strong>{formatOutputValue(value)}</strong>
-        </div>
-      ))}
-    </div>
-  ) : (
-    <div className="empty-output">No output yet.</div>
-  );
-
-  return (
-    <div className="output-frame">
-      <div className={running ? "output-blur" : ""}>{content}</div>
-      {running ? (
-        <div className="output-overlay">
-          <div className="sync-spinner" aria-label="Updating" role="status" />
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function humanizeKey(key: string) {
-  const labels: Record<string, string> = {
-    characters_no_spaces: "Characters no spaces",
-    word_or_character_units: "Word / character units",
-  };
-  return labels[key] ?? key.replace(/_/g, " ");
-}
-
-function formatOutputValue(value: unknown) {
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-
-  if (value === null || value === undefined) {
-    return "";
-  }
-
-  return JSON.stringify(value);
-}
-
-function outputClipboardText(output: Record<string, unknown>) {
-  if (typeof output.text === "string" && Object.keys(output).length === 1) {
-    return output.text;
-  }
-
-  return Object.entries(output)
-    .map(([key, value]) => `${humanizeKey(key)}: ${formatOutputValue(value)}`)
-    .join("\n");
-}
-
-function limitText(value: string) {
-  return value.length > MAX_TEXT_LENGTH ? value.slice(0, MAX_TEXT_LENGTH) : value;
-}
-
-function outputFileName(sourceName: string, toolId: string) {
-  const baseName = sourceName.split(/[\\/]/).pop()?.replace(/\.txt$/i, "") || "nekora-output";
-  const suffix = toolId.replace(/\W+/g, "-");
-  return `${baseName}.${suffix}.txt`;
 }

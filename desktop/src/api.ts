@@ -1,3 +1,4 @@
+// desktop/src/api.ts
 export type ModuleInfo = {
   id: string;
   name: string;

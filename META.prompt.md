@@ -1,165 +1,171 @@
-Nekora Architecture: External Module System
+Nekora Next-Gen Development Prompt
 
-Design and build Nekora as a cross-platform local-first desktop toolkit app with an external module system.
-
-Core idea:
-Nekora itself (core) is only the host application. Individual tool packages should be independent modules that can be downloaded, installed, loaded, disabled, updated, and removed independently.
-
-Example:
-
-- Root app repo: Nekora
-- Independent module repo: NekoPDF
-- Independent module repo: NekoImage
-- Independent module repo: NekoText
-- Independent module repo: NekoOCR
-- Independent module repo: NekoML
-
-Each module should be installable from:
-
-- Git repository URL
-- Local compressed
-- Later: official module registry
-
-The root app should not hard-code tool implementations. It should only provide:
-
-- Desktop UI
-- Backend API
-- Module manager
-- Module loader
-- Settings
-- History
-- Permission control
-- Logs
-- Shared SDK/interface
-
-Recommended stack:
+Build and extend Nekora as a local-first modular desktop toolkit using:
 
 - Desktop shell: Tauri v2
 - Frontend: React + TypeScript + Vite
-- Backend: Python 3.12 FastAPI with Conda (neko312)
-- Storage: SQLite
-- Module metadata: `nekora.module.json`
-- Module runtime: Python package loaded dynamically
-- Module source: Git repo or local folder
-- Module installation folder: user data directory, not the root repo
+- Backend: Python 3.12 + FastAPI
 
-Root repo structure:
+Nekora core is a host. Tools come from modules. Keep core and module boundaries explicit.
 
-```bash
+---
+
+Current Repository Shape
+
+```text
 Nekora/
-├── desktop/                  # Tauri + React frontend
-├── backend/                  # FastAPI host backend
-│   ├── nekora_core/
-│   │   ├── api/              # FastAPI routes
-│   │   ├── modules/          # module manager / loader / registry
-│   │   ├── sdk/              # shared module interface
-│   │   ├── db/               # SQLite logic
-│   │   └── main.py
-│   └── pyproject.toml
-├── modules_builtin/          # optional base modules shipped with app
+├── backend/
+│   └── nekora_core/
+│       ├── api/
+│       ├── modules/
+│       ├── sdk/
+│       └── main.py
+├── desktop/
+│   ├── src/
+│   │   ├── App.tsx
+│   │   ├── api.ts
+│   │   ├── styles.css
+│   │   └── components/
+│   │       ├── Sidebar.tsx
+│   │       ├── CommandBar.tsx
+│   │       ├── ToolWorkspace.tsx
+│   │       ├── UnifiedInputPanel.tsx
+│   │       ├── OutputPanel.tsx
+│   │       ├── ModuleModal.tsx
+│   │       ├── HistoryModal.tsx
+│   │       ├── AboutModal.tsx
+│   │       └── StatusIndicator.tsx
+│   └── src-tauri/
+├── modules_builtin/
 │   └── neko_text/
-├── data/                     # dev database/cache only
-├── scripts/
-├── META.prompt.md
-└── README.md
+└── scripts/
 ```
 
-Installed module default location at runtime:
+---
 
-```bash
-~/.local/share/Nekora/modules/        # Linux
-%APPDATA%/Nekora/modules/             # Windows
+UI Contract
+
+1) Layout
+- Fixed 3-column shell:
+  - left: Sidebar (logo+title head + module loaded + tool list + copyright foot)
+  - center: ToolWorkspace
+  - right: OutputPanel
+  - Search bar and app tool (top of center and right areas)
+
+2) Sidebar
+- Contains only:
+  - Nekora title + version
+  - Modules section (+ opens ModuleModal)
+  - Tools section (collapsible categories)
+  - fixed bottom copyright
+- No history/settings/about/status in sidebar.
+
+3) Top Bar
+- CommandBar includes:
+  - search input (always visible)
+  - icon-only actions: History, About, Settings
+  - single status indicator at end of actions
+- No Cmd/Ctrl+K behavior.
+
+4) Input
+- UnifiedInputPanel only (no tabs):
+  - textarea
+  - file drop zone
+  - URL row
+- File zone supports drag/drop and click-to-upload.
+- Input mode is auto-detected:
+  - file present -> file
+  - else URL present -> link
+  - else text
+
+5) Output
+- OutputPanel supports:
+  - rich preview (default)
+  - code/raw toggle
+  - icon-only controls: copy, code-toggle, expand, fullscreen
+  - copy copies source content (not stripped rendered text)
+  - file output row with download button when output contains file URL
+  - metadata row: chars / words / lines / execution time
+
+6) Floating Panels
+- HistoryModal: list of runs + restore state
+- AboutModal: version + core info
+- ModuleModal: installed/available modules, single active selection
+
+7) Motion
+- subtle transitions only:
+  - tool workspace switch
+  - output highlight fade-in
+  - run spinner
+
+---
+
+Frontend Data Flow (Current)
+
+- App.tsx owns main state:
+  - modules, tools, selected module/tool
+  - search query and filtered tools
+  - unified input state (text/url/file)
+  - run result + execution time
+  - run history list
+  - modal open/close state
+- Run flow:
+  1. user runs selected tool
+  2. backend `/tools/{tool_id}/run`
+  3. result stored in state
+  4. history entry appended
+- History restore:
+  - restores selected tool + input + output + execution time
+
+---
+
+Backend API Baseline
+
+```text
+GET  /health
+GET  /modules
+GET  /tools
+POST /tools/{tool_id}/run
 ```
 
-Each independent module repo should look like:
+Current UI consumes only these directly.
 
-```bash
-NekoPDF/
-├── nekora.module.json
-├── nekopdf/
-│   ├── __init__.py
-│   ├── module.py
-│   └── tools/
-│       ├── extract_text.py
-│       ├── merge_pdf.py
-│       └── split_pdf.py
-├── requirements.txt
-├── README.md
-└── LICENSE
-```
+---
 
-Module manifest example:
+Development Guardrails
 
-```json
-{
-  "id": "nekora.nekopdf",
-  "name": "NekoPDF",
-  "version": "0.1.0",
-  "description": "PDF tools for Nekora.",
-  "entry": "nekopdf.module:create_module",
-  "author": "Nekora",
-  "runtime": "python",
-  "min_nekora_version": "0.1.0",
-  "permissions": ["file.read", "file.write"],
-  "tools": ["pdf.extract_text", "pdf.merge", "pdf.split"]
-}
-```
+1) Preserve existing UX constraints
+- no profile/user UI
+- no tabbed input mode UI
+- no page navigation for modal content
+- keep icon-only action controls where already icon-only
 
-Every module must expose a factory function:
+2) Do not redesign backend unless requested
+- extend payload handling minimally and compatibly
 
-```python
-def create_module():
-    return NekoraModule(...)
-```
+3) Keep components compact and quiet
+- avoid heavy animation
+- avoid extra scroll regions
 
-Every tool inside a module must expose:
+4) Keep module model host-centric
+- core hosts tools; module internals stay outside UI assumptions
 
-- id
-- name
-- description
-- input_schema
-- output_schema
-- run(input_data, context)
+---
 
-Backend API should include:
+Near-Term Extension Priorities
 
-```
-GET    /health
-GET    /modules
-POST   /modules/install
-POST   /modules/install-from-git
-POST   /modules/install-from-local
-POST   /modules/{module_id}/enable
-POST   /modules/{module_id}/disable
-DELETE /modules/{module_id}
-GET    /tools
-GET    /tools/{tool_id}
-POST   /tools/{tool_id}/run
-GET    /history
-GET    /settings
-```
+1. Real module install/enable/disable lifecycle APIs.
+2. Persist history/settings in backend storage.
+3. True markdown renderer with safe formatting.
+4. File output preview adapters by MIME type.
+5. Search scope extension to module names and metadata.
 
-Module lifecycle:
+---
 
-1. Download or copy module
-2. Read `nekora.module.json`
-3. Validate module id, version, entry point, permissions
-4. Install Python dependencies if needed
-5. Register module in SQLite
-6. Load module dynamically
-7. Expose tools through `/tools`
-8. Allow disable without deleting
-9. Allow delete to remove files and release disk space
+Definition of Done for Future UI Changes
 
-Important design requirements:
-
-- The root app must still work without any external module.
-- At least one base module should be built first.
-- External modules should not modify Nekora core files.
-- Modules should be removable by deleting their installed folder and database entry.
-- The frontend should not know whether a tool is built-in or external.
-- Module installation should be explicit and visible to the user.
-- Heavy models should belong to modules, not the root app.
-- Module disk usage should be tracked.
-- Module dependencies should be isolated as much as possible.
-- Security should be considered before running arbitrary Git modules.
+- Build passes (`desktop`: `npm run build`)
+- 3-column layout remains intact
+- one status indicator only
+- search, history restore, and run flow continue to work
+- no regressions to unified input behavior

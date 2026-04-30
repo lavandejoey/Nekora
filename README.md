@@ -2,187 +2,131 @@
 
 Copyright © 2026 Ziyi LIU.
 
-Nekora is a local-first desktop toolkit host. The core app provides the
-desktop UI, backend API, module manager, shared SDK, settings, history, and
-permission boundaries. Tool implementations live in built-in or external
-modules.
+Nekora is a local-first modular desktop toolkit host built with Tauri v2, React, TypeScript, Vite, and FastAPI.  
+Core app responsibilities: UI shell, tool execution flow, module surface, and shared API contracts.  
+Tool logic is provided by modules (currently built-in `NekoText`).
 
-The root repository is for the core host only. Independent tool packages such
-as `NekoPDF`, `NekoImage`, or `NekoOCR` should live in separate repositories and
-can be checked out locally under ignored development folders such as
-`external_modules/`.
+## Current Product State
 
-## Current Slice
+Implemented desktop UX baseline:
 
-- FastAPI backend in `backend/`
-- React + Vite UI scaffold in `desktop/`
-- Tauri v2 shell config in `desktop/src-tauri/`
-- Built-in `NekoText` module in `modules_builtin/neko_text/`
-- In-memory module registry and tool runner
+- 3-column layout: `Sidebar | ToolWorkspace | OutputPanel`
+- unified input panel (textarea + file drop/upload + URL row)
+- real-time tool search in top bar
+- icon-only top-right actions for history/about/settings
+- floating panels for modules/history/about
+- rich output preview with code/raw toggle
+- output metadata (chars, words, lines, exec time)
+- single status indicator in command bar actions
+
+## Project Structure
+
+```text
+Nekora/
+├── backend/                    # FastAPI host backend
+├── desktop/                    # Tauri + React frontend
+│   ├── src/
+│   │   ├── App.tsx
+│   │   ├── api.ts
+│   │   ├── styles.css
+│   │   └── components/
+│   └── src-tauri/
+├── modules_builtin/
+│   └── neko_text/              # Built-in text tools module
+└── scripts/
+```
 
 ## Backend
 
-Install backend dependencies in the `neko312` Python 3.12 environment:
+Install:
 
 ```bash
 cd backend
 python -m pip install -e ".[dev]"
 ```
 
-Run the backend:
+Run:
 
 ```bash
 scripts/run_backend.sh
 ```
 
-Available MVP endpoints:
+Active endpoints used by UI:
 
 ```text
 GET  /health
 GET  /modules
-POST /modules/{module_id}/enable
-POST /modules/{module_id}/disable
 GET  /tools
-GET  /tools/{tool_id}
 POST /tools/{tool_id}/run
-GET  /history
-GET  /settings
 ```
 
-Example tool run:
+## Desktop
 
-```bash
-curl -X POST http://127.0.0.1:8000/tools/text.uppercase/run \
-  -H "Content-Type: application/json" \
-  -d '{"input_data":{"text":"hello nekora"}}'
-```
-
-## Desktop UI
-
-Install frontend dependencies:
+Install:
 
 ```bash
 cd desktop
 npm install
 ```
 
-Run the Vite UI:
+Build:
 
 ```bash
-scripts/run_desktop_dev.sh
+npm run build
 ```
 
-The UI expects the backend at `http://127.0.0.1:8000`. Override with
-`VITE_NEKORA_API_BASE` if needed.
+Dev mode:
 
-Text input is capped at 100,000 characters. Typed or pasted text runs live;
-loaded `.txt` files and direct `.txt` links require pressing Process Text before
-the output updates. File/link results can be downloaded from the output panel.
+```bash
+npm run dev
+```
 
-## Runtime Modes
-
-Nekora has three local run modes:
+Default frontend backend target:
 
 ```text
-NekoraBk  Backend only
-NekoraUi  Windowed UI only
-Nekora    Combined one-click app: starts backend, then opens the window
+http://127.0.0.1:8000
 ```
 
-Development helpers:
+Override with `VITE_NEKORA_API_BASE` if needed.
 
-```bash
-scripts/NekoraBk
-scripts/NekoraUi
-scripts/Nekora
-```
-
-`Nekora` starts the backend as a child process and stops it when the window
-closes. `NekoraUi` expects a backend to already be available at
-`http://127.0.0.1:8000`.
-
-## Windowed Desktop Builds
-
-Quick CLI:
-
-```bash
-# Linux / WSLg combined app
-cd desktop && npm install && npm run tauri:build:linux
-./src-tauri/target/release/Nekora
-```
-
-```powershell
-# Windows combined app
-cd desktop
-npm install
-npm run tauri:build
-.\src-tauri\target\release\Nekora.exe
-```
-
-Build and run the combined Linux app on Linux or WSL with WSLg:
-
-```bash
-cd desktop
-npm run tauri:build:linux
-./src-tauri/target/release/Nekora
-```
-
-Build the frontend-only UI executable:
-
-```bash
-cd desktop
-cargo build --manifest-path src-tauri/Cargo.toml --release --bin NekoraUi
-./src-tauri/target/release/NekoraUi
-```
-
-The Debian bundle is written to:
+## Runtime Scripts
 
 ```text
-desktop/src-tauri/target/release/bundle/deb/Nekora_0.1.0_amd64.deb
+scripts/NekoraBk   # backend only
+scripts/NekoraUi   # UI only
+scripts/Nekora     # combined launcher
 ```
 
-Build the Windows executable from a Windows shell, not from WSL:
+## UI Component Map
 
-```powershell
-cd desktop
-npm install
-npm run tauri:build
-```
+- `App.tsx`: root state + orchestration
+- `Sidebar.tsx`: modules/tools navigation and collapsible tool groups
+- `CommandBar.tsx`: search + history/about/settings + status
+- `ToolWorkspace.tsx`: selected tool header, actions, unified input host
+- `UnifiedInputPanel.tsx`: text/file/url inputs with auto mode detection
+- `OutputPanel.tsx`: rich preview/code toggle/copy/metadata/download row
+- `ModuleModal.tsx`: module selection panel
+- `HistoryModal.tsx`: past run list and restore
+- `AboutModal.tsx`: app info panel
+- `StatusIndicator.tsx`: ready/loading indicator
 
-The unpackaged Windows executable is expected under:
+## Data Flow (Frontend)
 
-```text
-desktop\src-tauri\target\release\Nekora.exe
-```
-
-The frontend-only Windows executable can be built with:
-
-```powershell
-cargo build --manifest-path src-tauri\Cargo.toml --release --bin NekoraUi
-```
-
-Expected output:
-
-```text
-desktop\src-tauri\target\release\NekoraUi.exe
-```
-
-Windows builds require the Rust toolchain, Microsoft C++ Build Tools, WebView2,
-Node.js, and npm installed on Windows.
+1. Load app bootstrap data from `/health`, `/modules`, `/tools`.
+2. Select tool from sidebar (or search + Enter).
+3. Build input payload from unified panel:
+   - text
+   - optional URL
+   - optional file name + file text
+4. Run tool via `/tools/{tool_id}/run`.
+5. Store output and append history entry.
+6. Restore full workspace state from history item click.
 
 ## Module Direction
 
-Each module should expose a `nekora.module.json` manifest and a Python factory:
-
-```python
-def create_module():
-    return NekoraModule(...)
-```
-
-External module installation, SQLite persistence, dependency isolation, and
-permission enforcement are intentionally not in the first slice. They will be
-added after the backend/module contract stabilizes.
+Nekora core remains a host. External modules should stay independent from core repo and expose compatible metadata + entrypoints.  
+Do not hard-code tool implementation details in frontend.
 
 ## License
 
-Nekora is licensed under the GNU General Public License v3.0. See `LICENSE`.
+GNU GPL v3.0. See `LICENSE`.

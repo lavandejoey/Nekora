@@ -29,6 +29,20 @@ def _text_value(input_data: dict[str, Any]) -> str:
     return value
 
 
+def _source_text(input_data: dict[str, Any]) -> str:
+    file_text = input_data.get("file_text")
+    if isinstance(file_text, str) and file_text:
+        return file_text
+    files = input_data.get("files")
+    if isinstance(files, list) and files:
+        first = files[0]
+        if isinstance(first, dict):
+            embedded_text = first.get("text")
+            if isinstance(embedded_text, str) and embedded_text:
+                return embedded_text
+    return _text_value(input_data)
+
+
 def uppercase(input_data: dict[str, Any], _context: ToolContext) -> dict[str, Any]:
     return {"text": _text_value(input_data).upper()}
 
@@ -38,7 +52,7 @@ def lowercase(input_data: dict[str, Any], _context: ToolContext) -> dict[str, An
 
 
 def count_text(input_data: dict[str, Any], _context: ToolContext) -> dict[str, Any]:
-    text = _text_value(input_data)
+    text = _source_text(input_data)
     words = [part for part in text.split() if part]
     non_space_characters = sum(1 for char in text if not char.isspace())
     word_or_character_units = sum(
@@ -62,7 +76,7 @@ def create_module() -> NekoraModule:
         id="nekora.neko_text",
         name="NekoText",
         version="0.1.0",
-        description="Basic text utilities for the Nekora core MVP.",
+        description="Basic text utilities for the Nekora core.",
         author="Nekora",
         permissions=(),
         source="builtin",
